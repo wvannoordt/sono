@@ -3,17 +3,38 @@
 
 namespace sl
 {
+    template <typename rtype>
+	struct wstate
+	: public spade::ctrs::arithmetic_array_t<rtype, 2, wstate<rtype>>
+    {
+        using base_t = spade::ctrs::arithmetic_array_t<rtype, 2, wstate<rtype>>;
+        using base_t::base_t;
+        _sp_hybrid wstate(){}
+        _sp_hybrid rtype& u() {return (*this)[0];}
+        _sp_hybrid rtype& v() {return (*this)[1];}
+        _sp_hybrid const rtype& u() const {return (*this)[0];}
+        _sp_hybrid const rtype& v() const {return (*this)[1];}
+        static std::string name(uint idx)
+        {
+            spade::ctrs::array<std::string, 2> names("disp", "vel");
+            return names[idx];
+        }
+    };
+    
     class solver
     {
         public:
         using coords_type = double;
         using value_type  = float;
+        using state_type  = wstate<value_type>;
         using blocks_type = spade::amr::amr_blocks_t<coords_type, spade::ctrs::array<int, 2>>;
         using grid_type   = spade::grid::cartesian_grid_t<spade::ctrs::array<int, 2>, spade::coords::identity<coords_type>, blocks_type, spade::parallel::pool_t>;
-        using array_type  = spade::grid::grid_array<grid_type, value_type, spade::device::best_type, spade::mem_map::ttiled_small_t, spade::grid::cell_centered>;
+        using array_type  = spade::grid::grid_array<grid_type, state_type, spade::device::best_type, spade::mem_map::ttiled_small_t, spade::grid::cell_centered>;
         
         private:
         std::unique_ptr<grid_type> grid;
+        std::unique_ptr<array_type> sol;
+        
         
         public:
         solver(scidf::node_t& input, spade::parallel::pool_t& pool)
@@ -25,12 +46,11 @@ namespace sl
             spade::bound_box_t<coords_type, 2> bounds{bnds[0], bnds[1], bnds[2], bnds[3]};
             spade::amr::amr_blocks_t blocks(num_blocks, bounds);
             spade::grid::cartesian_grid_t grid_temp(num_cells, blocks, coords, spade::ctrs::make_array(false, false), pool);
-            
             grid = std::make_unique<grid_type>(grid_temp);
             
-            // real_t q = 0.0;
-            // spade::ctrs::array<int, 2> num_exch{2, 2};
-            // spade::grid::grid_array disp(grid, q, num_exch, spade::device::best, spade::mem_map::tiled_small);
+            spade::ctrs::array<int, 2> num_exch{2, 2};
+            sol = std::make_unique<array_type>(*grid, num_exch);
+            sol = 0;
         }
         
         const auto& get_grid() const { return *grid; }
