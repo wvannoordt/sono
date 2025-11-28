@@ -1,3 +1,5 @@
+#pragma once
+
 #include "scidf.h"
 #include "spade.h"
 
@@ -35,6 +37,10 @@ namespace sl
         std::unique_ptr<grid_type> grid;
         std::unique_ptr<array_type> sol;
         
+        double cfl;
+        double spd;
+        
+        double dt;
         
         public:
         solver(scidf::node_t& input, spade::parallel::pool_t& pool)
@@ -43,6 +49,11 @@ namespace sl
             spade::ctrs::array<int, 2> num_blocks = input["num_blocks"];
             spade::ctrs::array<int, 2> num_cells  = input["num_cells"];
             spade::ctrs::array<coords_type, 4> bnds  = input["bounds"];
+            
+            
+            cfl = double(input["cfl"]);
+            spd = double(input["spd"]);
+            
             spade::bound_box_t<coords_type, 2> bounds{bnds[0], bnds[1], bnds[2], bnds[3]};
             spade::amr::amr_blocks_t blocks(num_blocks, bounds);
             spade::grid::cartesian_grid_t grid_temp(num_cells, blocks, coords, spade::ctrs::make_array(false, false), pool);
@@ -51,8 +62,20 @@ namespace sl
             spade::ctrs::array<int, 2> num_exch{2, 2};
             sol = std::make_unique<array_type>(*grid, num_exch);
             sol = 0;
+            
+            this->set_dt();
         }
         
         const auto& get_grid() const { return *grid; }
+        double get_dt() const { return dt; }
+        auto& solution() { return *sol; }
+        const auto& solution() const { return *sol; }
+        
+        private:
+        void set_dt()
+        {
+            const auto dxmin = spade::ctrs::array_norm(grid->compute_dx_min());
+            dt = cfl * dxmin / spd;
+        }
     };
 }

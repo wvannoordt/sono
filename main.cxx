@@ -2,6 +2,7 @@
 #include "spade.h"
 
 #include "solver.h"
+#include "impulse.h"
 
 using coor_t = double;
 using real_t = float;
@@ -15,6 +16,12 @@ void entry(spade::parallel::pool_t& pool)
     std::filesystem::path out_dir(out_dir_str);
     spade::io::mkdir(out_dir);
     spade::io::output_vtk(out_dir / "grid.vtk", slv.get_grid());
+    
+    print("timestep:", slv.get_dt());
+    
+    // fill impulses
+    auto impulses = sl::read_impulses(input["Impulses"]);
+    print("num. impulses:", impulses.size());
 }
 
 int main(int argc, char** argv)
