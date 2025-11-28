@@ -4,6 +4,9 @@ ifndef MPI_ENABLE
 MPI_ENABLE := 1
 endif
 
+
+gee=1
+
 ifndef fmath
 fmath := 1
 endif
@@ -43,7 +46,6 @@ dflags += --extended-lambda
 #dflags += --maxrregcount 254
 dflags += -w
 
-gee=1
 
 ifeq (${gee},1)
 dflags += -lineinfo

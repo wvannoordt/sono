@@ -15,13 +15,19 @@ void entry(spade::parallel::pool_t& pool)
     std::string out_dir_str = input["out_dir"];
     std::filesystem::path out_dir(out_dir_str);
     spade::io::mkdir(out_dir);
-    spade::io::output_vtk(out_dir / "grid.vtk", slv.get_grid());
+    spade::io::mkdir(out_dir / "misc");
+    spade::io::output_vtk(out_dir / "misc" / "grid.vtk", slv.get_grid());
     
     print("timestep:", slv.get_dt());
     
     // fill impulses
     auto impulses = sl::read_impulses(input["Impulses"]);
     print("num. impulses:", impulses.size());
+    
+    slv.add_init_condition(impulses);
+    
+    spade::io::mkdir(out_dir / "surf");
+    spade::io::output_vtk(out_dir / "surf", "init", slv.solution());
 }
 
 int main(int argc, char** argv)

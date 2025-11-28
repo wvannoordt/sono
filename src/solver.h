@@ -2,6 +2,7 @@
 
 #include "scidf.h"
 #include "spade.h"
+#include "impulse.h"
 
 namespace sl
 {
@@ -31,7 +32,7 @@ namespace sl
         using state_type  = wstate<value_type>;
         using blocks_type = spade::amr::amr_blocks_t<coords_type, spade::ctrs::array<int, 2>>;
         using grid_type   = spade::grid::cartesian_grid_t<spade::ctrs::array<int, 2>, spade::coords::identity<coords_type>, blocks_type, spade::parallel::pool_t>;
-        using array_type  = spade::grid::grid_array<grid_type, state_type, spade::device::best_type, spade::mem_map::ttiled_small_t, spade::grid::cell_centered>;
+        using array_type  = spade::grid::grid_array<grid_type, state_type, spade::device::best_type, spade::mem_map::tlinear_t, spade::grid::cell_centered>;
         
         private:
         std::unique_ptr<grid_type> grid;
@@ -57,11 +58,11 @@ namespace sl
             spade::bound_box_t<coords_type, 2> bounds{bnds[0], bnds[1], bnds[2], bnds[3]};
             spade::amr::amr_blocks_t blocks(num_blocks, bounds);
             spade::grid::cartesian_grid_t grid_temp(num_cells, blocks, coords, spade::ctrs::make_array(false, false), pool);
-            grid = std::make_unique<grid_type>(grid_temp);
+            grid = std::make_unique<grid_type>(std::move(grid_temp));
             
             spade::ctrs::array<int, 2> num_exch{2, 2};
             sol = std::make_unique<array_type>(*grid, num_exch);
-            sol = 0;
+            *sol = 0;
             
             this->set_dt();
         }
@@ -70,6 +71,19 @@ namespace sl
         double get_dt() const { return dt; }
         auto& solution() { return *sol; }
         const auto& solution() const { return *sol; }
+        
+        void add_init_condition(const std::vector<impulse>& imps)
+        {
+            for (const auto& imp: imps)
+            {
+                spade::algs::fill_array(this->solution(), [=] _sp_hybrid (const state_type& w, const spade::coords::point_t<coords_type>& x){
+                    auto output = w;
+                    spade::ctrs::array<coords_type, 2> xx(x.x(), x.y()); // annoying type strictness
+                    output.u() += imp.eval(xx);
+                    return output;
+                });
+            }
+        }
         
         private:
         void set_dt()
