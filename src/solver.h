@@ -33,18 +33,20 @@ namespace sl
         using blocks_type   = spade::amr::amr_blocks_t<coords_type, spade::ctrs::array<int, 2>>;
         using grid_type     = spade::grid::cartesian_grid_t<spade::ctrs::array<int, 2>, spade::coords::identity<coords_type>, blocks_type, spade::parallel::pool_t>;
         using array_type    = spade::grid::grid_array<grid_type, state_type, spade::device::best_type, spade::mem_map::tlinear_t, spade::grid::cell_centered>;
+        using scalr_type    = spade::grid::grid_array<grid_type, value_type, spade::device::best_type, spade::mem_map::tlinear_t, spade::grid::cell_centered>;
         using exchange_type = spade::grid::arr_exchange_t<array_type>;
         
         private:
         std::unique_ptr<grid_type> grid;
         std::unique_ptr<array_type> sol;
         std::unique_ptr<array_type> sol2;
+        std::unique_ptr<scalr_type> spd;
         std::unique_ptr<array_type> rhs;
+        
         
         exchange_type ex;
         
         double cfl;
-        double spd;
         
         double dt;
         double time;
@@ -59,7 +61,6 @@ namespace sl
             
             
             cfl = double(input["cfl"]);
-            spd = double(input["spd"]);
             time = 0;
             spade::bound_box_t<coords_type, 2> bounds{bnds[0], bnds[1], bnds[2], bnds[3]};
             spade::amr::amr_blocks_t blocks(num_blocks, bounds);
@@ -71,9 +72,11 @@ namespace sl
             sol   = std::make_unique<array_type>(*grid, num_exch);
             sol2  = std::make_unique<array_type>(*grid, num_exch);
             rhs   = std::make_unique<array_type>(*grid, num_exch);
+            spd   = std::make_unique<scalr_type>(*grid, num_exch);
             *sol  = 0;
             *sol2 = 0;
             *rhs  = 0;
+            *spd  = 1;
             ex = spade::grid::make_exchange(*sol, 2);
             this->set_dt();
             ex.exchange(*sol, sol->get_grid().group());
@@ -85,6 +88,8 @@ namespace sl
         auto& solution() { return *sol; }
         const auto& solution() const { return *sol; }
         auto get_time() const { return time; }
+        auto& get_speed() { return *spd; }
+        const auto& get_speed() const { return *spd; }
         
         void add_init_condition(const std::vector<impulse>& imps)
         {
@@ -102,7 +107,6 @@ namespace sl
         void advance()
         {
             auto dt_loc = value_type(dt);
-            auto c_sqr  = value_type(spd*spd);
         
             for (int stage = 0; stage < 3; ++stage)
             {
@@ -114,6 +118,8 @@ namespace sl
                 auto t_loc  = value_type(time);
                 if (stage == 1) t_loc = value_type(time + dt);
                 if (stage == 2) t_loc = value_type(time + 0.5*dt);
+                
+                const auto c_arr_img = spd->image();
         
                 spade::algs::for_each(*rhs, [=] _sp_hybrid (const spade::grid::cell_idx_t& icell) mutable
                 {
@@ -131,6 +137,7 @@ namespace sl
                     state_type rhs_loc = 0;
                     rhs_loc.u() = q.v();
                     rhs_loc.v() = value_type(0);
+                    const auto c_loc = c_arr_img.get_elem(icell);
                     for (int d = 0; d < 2; ++d)
                     {
                         auto inv_ddx2 = inv_dx[d]*inv_dx[d];
@@ -156,7 +163,7 @@ namespace sl
                                   + value_type(16.0) * qm.u()
                                   - qmm.u()
                                 ) * (inv_ddx2 / value_type(12.0));
-                        rhs_loc.v() += c_sqr * ddx;
+                        rhs_loc.v() += c_loc*c_loc*ddx;
                     }
         
                     if (stage == 0)
@@ -212,7 +219,7 @@ namespace sl
         void set_dt()
         {
             const auto dxmin = spade::ctrs::array_norm(grid->compute_dx_min());
-            dt = cfl * dxmin / spd;
+            dt = cfl * dxmin / 1.0;
         }
     };
 }

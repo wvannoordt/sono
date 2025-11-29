@@ -67,7 +67,7 @@ cc = ${cc_d}
 flags := ${dflags} -Xcompiler "${hflags}"
 endif
 main: setup
-	${cc} ${flags} -I${SCIDF}/src -I./src -I${SPADE}/src main.cxx -o bin/${target}
+	${cc} ${flags} -I${SCIDF}/src -I./src -I${SPADE}/src main.cxx -o bin/${target} -lz
 
 setup:
 	mkdir -p bin
