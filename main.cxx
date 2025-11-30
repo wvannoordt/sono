@@ -29,15 +29,56 @@ void entry(spade::parallel::pool_t& pool)
     spade::io::mkdir(out_dir / "img");
     spade::io::output_vtk(out_dir / "misc" / "grid.vtk", slv.get_grid());
     
+    real_t d0_default = input["d0"];
+    real_t d1_default = input["d1"];
+    real_t d2_default = input["d2"];
+    
+    // spade::algs::fill_array(slv.get_speed(), [=] _sp_hybrid (const spade::coords::point_t<double>& x){
+    //     auto xhat = x[0] - 0.5;
+    //     auto yhat = x[1] - 0.5;
+    //     auto r = sqrt(xhat*xhat + yhat*yhat);
+    //     auto back = 1 + sin(30*x[0])*cos(20*x[1]);
+    //     return 1 - 0.8*exp(-13*r*r) + 0.6*back;
+    // });
+    
     spade::algs::fill_array(slv.get_speed(), [=] _sp_hybrid (const spade::coords::point_t<double>& x){
-        auto xhat0 = x[0] - 0.5;
-        auto yhat0 = 150*(x[1] - 0.75);
+        int n = 5;
+        float wid = 0.03;
+        float dx = 1.0/n;
+        int px = 1;
+        int py = 1;
         
-        auto xhat1 = x[0] - 0.5;
-        auto yhat1 = 150*(x[1] - 0.25);
-        auto r0 = sqrt(xhat0*xhat0 + yhat0*yhat0);
-        auto r1 = sqrt(xhat1*xhat1 + yhat1*yhat1);
-        return 1.0 - 0.99*(exp(-8*r0*r0) + exp(-8*r1*r1));
+        if (x[0] > px*dx && x[0] < (px+1)*dx && x[1] > py*dx && x[1] < (py+1)*dx) return 1;
+        int ix = floor(x[0]/dx);
+        int iy = floor(x[1]/dx);
+        
+        float cx = (float(ix) + 0.5)*dx;
+        float cy = (float(iy) + 0.5)*dx;
+        
+        float xmin = cx - (0.5*dx - 0.5*wid);
+        float xmax = cx + (0.5*dx - 0.5*wid);
+        float ymin = cy - (0.5*dx - 0.5*wid);
+        float ymax = cy + (0.5*dx - 0.5*wid);
+        if (x[0] < xmax && x[0] > xmin && x[1] < ymax && x[1] > ymin) return 0;
+        
+        xmin = 0.45;
+        xmax = 0.55;
+        ymin = 0.45;
+        ymax = 0.55;
+        if (x[0] < xmax && x[0] > xmin && x[1] < ymax && x[1] > ymin) return 0;
+        return 1;
+    });
+    
+    spade::algs::fill_array(slv.get_d0(), [=] _sp_hybrid (const spade::coords::point_t<double>& x){
+        return d0_default;
+    });
+    
+    spade::algs::fill_array(slv.get_d1(), [=] _sp_hybrid (const spade::coords::point_t<double>& x){
+        return d1_default;
+    });
+    
+    spade::algs::fill_array(slv.get_d2(), [=] _sp_hybrid (const spade::coords::point_t<double>& x){
+        return d2_default;
     });
     
     spade::io::output_vtk(out_dir / "misc", "spd", slv.get_speed());

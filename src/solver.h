@@ -43,6 +43,10 @@ namespace sl
         std::unique_ptr<scalr_type> spd;
         std::unique_ptr<array_type> rhs;
         
+        std::unique_ptr<scalr_type> d0;
+        std::unique_ptr<scalr_type> d1;
+        std::unique_ptr<scalr_type> d2;
+        
         
         exchange_type ex;
         
@@ -73,10 +77,16 @@ namespace sl
             sol2  = std::make_unique<array_type>(*grid, num_exch);
             rhs   = std::make_unique<array_type>(*grid, num_exch);
             spd   = std::make_unique<scalr_type>(*grid, num_exch);
+            d0    = std::make_unique<scalr_type>(*grid, num_exch);
+            d1    = std::make_unique<scalr_type>(*grid, num_exch);
+            d2    = std::make_unique<scalr_type>(*grid, num_exch);
             *sol  = 0;
             *sol2 = 0;
             *rhs  = 0;
             *spd  = 1;
+            *d0   = 0;
+            *d1   = 0;
+            *d2   = 0;
             ex = spade::grid::make_exchange(*sol, 2);
             this->set_dt();
             ex.exchange(*sol, sol->get_grid().group());
@@ -90,6 +100,14 @@ namespace sl
         auto get_time() const { return time; }
         auto& get_speed() { return *spd; }
         const auto& get_speed() const { return *spd; }
+        
+        auto& get_d0() { return *d0; }
+        auto& get_d1() { return *d1; }
+        auto& get_d2() { return *d2; }
+        
+        const auto& get_d0() const { return *d0; }
+        const auto& get_d1() const { return *d1; }
+        const auto& get_d2() const { return *d2; }
         
         void add_init_condition(const std::vector<impulse>& imps)
         {
@@ -120,6 +138,10 @@ namespace sl
                 if (stage == 2) t_loc = value_type(time + 0.5*dt);
                 
                 const auto c_arr_img = spd->image();
+                
+                const auto d0_img = d0->image();
+                const auto d1_img = d1->image();
+                const auto d2_img = d2->image();
         
                 spade::algs::for_each(*rhs, [=] _sp_hybrid (const spade::grid::cell_idx_t& icell) mutable
                 {
@@ -138,6 +160,14 @@ namespace sl
                     rhs_loc.u() = q.v();
                     rhs_loc.v() = value_type(0);
                     const auto c_loc = c_arr_img.get_elem(icell);
+                    const auto d0_loc = d0_img.get_elem(icell);
+                    const auto d1_loc = d1_img.get_elem(icell);
+                    const auto d2_loc = d2_img.get_elem(icell);
+                    
+                    const auto v_dx0 = q.v();
+                    auto v_dx2 = 0*v_dx0;
+                    auto v_dx4 = 0*v_dx0;
+                    
                     for (int d = 0; d < 2; ++d)
                     {
                         auto inv_ddx2 = inv_dx[d]*inv_dx[d];
@@ -164,7 +194,28 @@ namespace sl
                                   - qmm.u()
                                 ) * (inv_ddx2 / value_type(12.0));
                         rhs_loc.v() += c_loc*c_loc*ddx;
+                                
+                        // Second deriv. of veloc
+                        const auto ddx_v =
+                        ( - qpp.v()
+                          + value_type(16.0) * qp.v()
+                          - value_type(30.0) * qc.v()
+                          + value_type(16.0) * qm.v()
+                          - qmm.v()
+                        ) * (inv_ddx2 / value_type(12.0));
+                        v_dx2 += ddx_v;
+                        
+                        // Fourth deriv. of veloc
+                        const auto ddxxxx_v =
+                            ( qmm.v()
+                            - value_type(4.0) * qm.v()
+                            + value_type(6.0) * qc.v()
+                            - value_type(4.0) * qp.v()
+                            + qpp.v()
+                            ) * (inv_ddx2 * inv_ddx2); // = 1 / dx^4
+                        v_dx4 += ddxxxx_v;
                     }
+                    rhs_loc.v() += (-d0_loc*v_dx0 + d1_loc*v_dx2 - d2_loc*v_dx4);
         
                     if (stage == 0)
                     {
